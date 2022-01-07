@@ -1,0 +1,26 @@
+services:
+  db:
+    image: mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${DB_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_PASSWORD}
+      MONGO_INITDB_DATABASE: ${DB_INITDB}
+    container_name: ${CONTAINER_DB}
+    ports:
+      - ${DB_PORT}:${DB_PORT}
+    expose:
+      - ${DB_PORT}
+
+  web:
+    build: .
+    command: npm run start
+    volumes:
+      - .:/home/server
+      - /home/server/node_modules
+    ports:
+      - "8080:8080"
+    links:
+      - db
+    container_name: ${CONTAINER_WEB}
+    expose:
+      - 8080

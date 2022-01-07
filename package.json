@@ -1,0 +1,29 @@
+{
+  "name": "svg-editor-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.ts",
+  "module": "index.ts",
+  "scripts": {
+    "start": "npm install && npx nodemon --ext ts --exec \"tsc && node --experimental-specifier-resolution=node build/index.js\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "private": true,
+  "keywords": [],
+  "author": "",
+  "type": "module",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^17.0.8",
+    "@types/ws": "^8.2.2",
+    "nodemon": "^2.0.15",
+    "prettier": "^2.5.1",
+    "tslib": "^2.3.1",
+    "typescript": "^4.5.4"
+  },
+  "dependencies": {
+    "dotenv": "^10.0.0",
+    "mongodb": "^4.2.2",
+    "ws": "^8.4.0"
+  }
+}
