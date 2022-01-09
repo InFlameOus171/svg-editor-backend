@@ -1,24 +1,29 @@
 import { IncomingMessage } from "http";
 import url from "url";
 import { RawData, Server, WebSocket as WebSocketws } from "ws";
-import { serverMessageEvents } from "../../types/templates";
+import {
+  ServerMessageEvents,
+  serverMessageEvents,
+} from "../../types/templates";
+import mongo from "mongodb";
 import { ParsedData } from "../../types/types";
+import { Database } from "../Database/Database";
 
-const { message, ping, pong, error } = serverMessageEvents;
+const { message, ping, pong, error, shapes } = serverMessageEvents;
 
 export const heartBeat = (socket: WebSocket) => {
-  console.log(``);
+  console.log(`Heartbeat...`);
   socket.isAlive = true;
 };
 
 export class SocketEventHandler {
   #server: Server;
   #socket: WebSocket;
-  #url?: string;
-  constructor(server: Server, socket: WebSocket, request: IncomingMessage) {
+  #database: Database;
+  constructor(server: Server, database: Database, socket: WebSocket) {
     this.#server = server;
+    this.#database = database;
     this.#socket = socket;
-    this.#url = request.url;
   }
   parseMessage = (data: RawData): ParsedData => {
     return JSON.parse(data.toString());
@@ -26,14 +31,26 @@ export class SocketEventHandler {
 
   handleEvent = (receivedMessage: RawData): void => {
     const parsedMessage = this.parseMessage(receivedMessage);
-    const { event, user, value } = parsedMessage;
+    const { event, user, value, userId, roomId } = parsedMessage;
     switch (event) {
-      case "add-shape":
+      case "update-shapes": {
+        console.log(roomId);
+        if (!roomId || !value) return;
+        this.#database.updateRoom(roomId, value).then(() => {
+          this.#database.getShapes(roomId).then((shapes: string) => {
+            this.sendToAll(shapes);
+            console.log("Updated shapes: ", parsedMessage);
+          });
+        });
         break;
-      case "remove-shape":
+      }
+      case "delete-shapes":
         break;
-      case "edit-shape": {
+      case "get-shapes": {
+        if (!roomId) return;
         try {
+          this.#database.getShapes(roomId);
+          this.#socket.send(message("shapeslel"));
         } catch (err) {
           console.error(err);
         }
@@ -43,39 +60,41 @@ export class SocketEventHandler {
         break;
       case "join-room": {
         try {
-          if (this.#url) {
-            const room = url.parse(this.#url, true).query.room;
-            if (typeof room === "string") {
-              this.#socket.connectedRoom = room;
-              this.#socket.send(
-                message(`Connected to room: ${this.#socket.connectedRoom}`)
-              );
-            }
+          if (!!roomId) {
+            this.#socket.connectedRoom = roomId;
+            this.#socket.send(
+              message(`Connected to room: ${this.#socket.connectedRoom}`)
+            );
             this.#socket.connectedUser = user;
+            this.#socket.connectedUserId = userId;
             console.log(
               "User: %s has joined room with the ID: %s !",
               this.#socket.connectedUser,
               this.#socket.connectedRoom
             );
+            this.#database.doesRoomExist(roomId).then((roomDoesExist) => {
+              if (roomDoesExist) {
+                console.log("Room exists. Returning current shapes.");
+                this.#database.getShapes(roomId).then((shapesValue) => {
+                  this.#socket.send(shapes(shapesValue));
+                });
+              } else {
+                console.log("Room does not exist. Creating room.");
+                this.#database.updateRoom(roomId, value ?? "");
+              }
+            });
           } else {
             throw new Error("empty_room_id");
           }
         } catch (err) {
-          this.#socket.send(error(err));
+          this.#socket.send(error(err as string));
           console.error(err);
         }
         break;
       }
       case "message": {
-        this.#server.clients.forEach((client: WebSocket) => {
-          if (
-            client.readyState === WebSocketws.OPEN &&
-            client.connectedRoom &&
-            this.#socket.connectedRoom === client.connectedRoom
-          ) {
-            client.send(message(value, user));
-          }
-        });
+        if (!value) return;
+        this.sendToAll(message(value, user));
         break;
       }
       case "pong": {
@@ -89,5 +108,25 @@ export class SocketEventHandler {
       default:
         console.log(parsedMessage);
     }
+  };
+
+  sendToUserById = (id: string, message: string) => {
+    this.#server.clients.forEach((client: WebSocket) => {
+      if (client.connectedUserId === id) {
+        client.send(message);
+      }
+    });
+  };
+
+  sendToAll = (message: string) => {
+    this.#server.clients.forEach((client: WebSocket) => {
+      if (
+        client.readyState === WebSocketws.OPEN &&
+        client.connectedRoom &&
+        this.#socket.connectedRoom === client.connectedRoom
+      ) {
+        client.send(message);
+      }
+    });
   };
 }

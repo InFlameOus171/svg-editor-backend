@@ -7,6 +7,7 @@ declare global {
     // send: (message: string) => void;
     connectedRoom?: string;
     connectedUser?: string;
+    connectedUserId?: string;
     send(data: TemplateType, cb?: (err?: Error) => void): void;
     send(
       data: TemplateType,

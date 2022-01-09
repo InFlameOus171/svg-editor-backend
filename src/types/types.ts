@@ -1,4 +1,4 @@
-import { ClientMessageEventType } from "./templates";
+import { GENERAL_EVENTS } from "./templates";
 
 export type Coordinates = [number, number];
 export type BaseParams = {
@@ -17,8 +17,10 @@ export type BaseParams = {
 export type Matrix = [number, number, number, number, number, number];
 
 export type ParsedData = {
-  event?: ClientMessageEventType;
+  event?: GENERAL_EVENTS;
   user?: string;
+  userId?: string;
   value?: string;
+  roomId?: string;
   [key: string]: any;
 };
