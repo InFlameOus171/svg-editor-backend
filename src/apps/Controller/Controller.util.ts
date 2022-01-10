@@ -12,7 +12,6 @@ import { Database } from "../Database/Database";
 const { message, ping, pong, error, shapes } = serverMessageEvents;
 
 export const heartBeat = (socket: WebSocket) => {
-  console.log(`Heartbeat...`);
   socket.isAlive = true;
 };
 
@@ -29,23 +28,46 @@ export class SocketEventHandler {
     return JSON.parse(data.toString());
   };
 
-  handleEvent = (receivedMessage: RawData): void => {
+  #handleUpdateShapes = async (
+    value: string | string[] | undefined,
+    roomId: string | undefined,
+    lockedById?: string
+  ) => {
+    const incomingChangedShapes = value as string[];
+    if (!roomId || !value || !value.length) return;
+
+    const unformattedShapes = await this.#database.updateRoom(
+      roomId,
+      incomingChangedShapes,
+      lockedById
+    );
+    const newShapesInRoom = JSON.stringify(unformattedShapes);
+    console.log("new shapes in room ", shapes(newShapesInRoom));
+    this.sendToAll(shapes(newShapesInRoom));
+  };
+
+  #handleDeleteShapes = async (
+    roomId: string | undefined,
+    ids?: string | string[]
+  ) => {
+    const newShapes = await this.#database.deleteShapes(roomId, ids);
+    const newShapesInRoom = JSON.stringify(newShapes);
+    this.sendToAll(shapes(newShapesInRoom));
+  };
+
+  handleEvent = async (receivedMessage: RawData) => {
     const parsedMessage = this.parseMessage(receivedMessage);
     const { event, user, value, userId, roomId } = parsedMessage;
     switch (event) {
       case "update-shapes": {
-        console.log(roomId);
-        if (!roomId || !value) return;
-        this.#database.updateRoom(roomId, value).then(() => {
-          this.#database.getShapes(roomId).then((shapes: string) => {
-            this.sendToAll(shapes);
-            console.log("Updated shapes: ", parsedMessage);
-          });
-        });
+        this.#handleUpdateShapes(value, roomId);
         break;
       }
-      case "delete-shapes":
+      case "delete-shapes": {
+        console.log("DELETING", roomId, value);
+        this.#handleDeleteShapes(roomId, value);
         break;
+      }
       case "get-shapes": {
         if (!roomId) return;
         try {
@@ -59,6 +81,8 @@ export class SocketEventHandler {
       case "disconnect":
         break;
       case "join-room": {
+        const incomingChangedShapes = value as string[];
+
         try {
           if (!!roomId) {
             this.#socket.connectedRoom = roomId;
@@ -72,17 +96,16 @@ export class SocketEventHandler {
               this.#socket.connectedUser,
               this.#socket.connectedRoom
             );
-            this.#database.doesRoomExist(roomId).then((roomDoesExist) => {
-              if (roomDoesExist) {
-                console.log("Room exists. Returning current shapes.");
-                this.#database.getShapes(roomId).then((shapesValue) => {
-                  this.#socket.send(shapes(shapesValue));
-                });
-              } else {
-                console.log("Room does not exist. Creating room.");
-                this.#database.updateRoom(roomId, value ?? "");
-              }
-            });
+            if (await this.#database.doesRoomExist(roomId)) {
+              console.log("Room exists. Returning current shapes.");
+              const aaa = await this.#database.getShapes(roomId);
+              this.#database.getShapes(roomId).then((shapesValue) => {
+                this.#socket.send(shapes(JSON.stringify(shapesValue)));
+              });
+            } else {
+              console.log("Room does not exist. Creating room.");
+              this.#database.createRoom(roomId, incomingChangedShapes ?? []);
+            }
           } else {
             throw new Error("empty_room_id");
           }
@@ -94,8 +117,18 @@ export class SocketEventHandler {
       }
       case "message": {
         if (!value) return;
-        this.sendToAll(message(value, user));
+        this.sendToAll(message(value as string, user));
         break;
+      }
+      case "lock-shapes": {
+        console.log("LOCKING", value);
+        if (value === undefined || !roomId) return;
+        this.#handleUpdateShapes(value, roomId, userId);
+      }
+      case "unlock-shapes": {
+        console.log("UNLOCKING", value);
+        if (value === undefined || !roomId) return;
+        this.#handleUpdateShapes(value, roomId);
       }
       case "pong": {
         heartBeat(this.#socket);
@@ -125,6 +158,8 @@ export class SocketEventHandler {
         client.connectedRoom &&
         this.#socket.connectedRoom === client.connectedRoom
       ) {
+        console.log(client.connectedRoom, client.connectedUser);
+
         client.send(message);
       }
     });

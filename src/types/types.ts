@@ -20,7 +20,7 @@ export type ParsedData = {
   event?: GENERAL_EVENTS;
   user?: string;
   userId?: string;
-  value?: string;
+  value?: string | string[];
   roomId?: string;
   [key: string]: any;
 };

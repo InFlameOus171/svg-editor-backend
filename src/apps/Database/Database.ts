@@ -10,7 +10,7 @@ export class Database {
     this.#mongoClient = mongo.MongoClient;
   }
 
-  #connectToDB = (
+  #connectToDB = async (
     callbackFunction: (
       error: mongo.AnyError | undefined,
       db: mongo.MongoClient | undefined
@@ -52,7 +52,6 @@ export class Database {
         if (db) {
           const dbo = db?.db("svgeditor");
           dbo.collection("rooms").findOne({ roomId }, (err, result) => {
-            console.log("roomid: %s, result: %s", roomId, result);
             resolve(!!result);
           });
         }
@@ -60,18 +59,122 @@ export class Database {
     });
   };
 
-  updateRoom = async (roomId: string, shapes: string) => {
+  deleteShapes = async (roomId?: string, ids: string | string[] = []) => {
+    const incomingChangedShapes = ids as string[];
+    if (!roomId || !incomingChangedShapes || !incomingChangedShapes.length)
+      return;
+    let allShapes = await this.getShapes(roomId);
+    allShapes = allShapes.filter((shape) => !ids.includes(shape.id));
+    console.log("cleaned shapes: ", allShapes);
+
+    const updatePromise = new Promise<Record<string, any>[]>(
+      (resolve, reject) => {
+        const obj = { $set: { roomId, shapes: allShapes } };
+        this.#connectToDB((error, db) => {
+          if (error) throw error;
+          if (db) {
+            const dbo = db?.db("svgeditor");
+            dbo
+              .collection("rooms")
+              .findOneAndUpdate({ roomId }, obj, (err, result) => {
+                if (err) throw err;
+                db.close();
+                resolve(allShapes);
+              });
+          }
+        });
+      }
+    );
+    return updatePromise;
+  };
+
+  unlockAllById = async (roomId?: string, lockedById?: string) => {
+    if (!roomId) return;
+    const savedShapes = await this.getShapes(roomId);
+    savedShapes.forEach((savedShape) => {
+      if (savedShape.isLocked && savedShape.lockedById === lockedById) {
+        savedShape.isLocked = false;
+        savedShape.lockedById = "";
+      }
+    });
+    const updatePromise = new Promise<Record<string, any>[]>(
+      (resolve, reject) => {
+        const obj = { $set: { roomId, shapes: savedShapes } };
+        this.#connectToDB((error, db) => {
+          if (error) throw error;
+          if (db) {
+            const dbo = db?.db("svgeditor");
+            dbo
+              .collection("rooms")
+              .findOneAndUpdate({ roomId }, obj, (err, result) => {
+                if (err) throw err;
+                db.close();
+                resolve(savedShapes);
+              });
+          }
+        });
+      }
+    );
+    return updatePromise;
+  };
+
+  updateRoom = async (
+    roomId: string,
+    incomingChanges: string[],
+    lockedById?: string
+  ) => {
+    let savedShapes: Array<Record<string, any>> = await this.getShapes(roomId);
+    const incomingShapes: Array<Record<string, any>> = incomingChanges.map(
+      (shape) => JSON.parse(shape)
+    );
+    incomingShapes.forEach((incomingShape) => {
+      if (typeof savedShapes === "string") {
+        savedShapes = [incomingShape];
+        return;
+      }
+      const existingShapeIndex = savedShapes.findIndex(
+        (savedShape) => incomingShape.id === savedShape.id
+      );
+      if (existingShapeIndex >= 0) {
+        savedShapes[existingShapeIndex] = incomingShape;
+        return;
+      }
+      if (incomingShape.isLocked) {
+        incomingShape.lockedById = lockedById;
+      }
+      savedShapes.push(incomingShape);
+    });
+
+    const updatePromise = new Promise<Record<string, any>[]>(
+      (resolve, reject) => {
+        const obj = { $set: { roomId, shapes: savedShapes } };
+        this.#connectToDB((error, db) => {
+          if (error) throw error;
+          if (db) {
+            const dbo = db?.db("svgeditor");
+            dbo
+              .collection("rooms")
+              .findOneAndUpdate({ roomId }, obj, (err, result) => {
+                if (err) throw err;
+                db.close();
+                resolve(savedShapes);
+              });
+          }
+        });
+      }
+    );
+    return updatePromise;
+  };
+
+  createRoom = async (roomId: string, shapes: string[]) => {
     const updatePromise = new Promise<void>((resolve, reject) => {
       const obj = { roomId, shapes };
       this.#connectToDB((error, db) => {
         if (error) throw error;
-        console.log("Connected with database!");
         if (db) {
-          // let shapes = {};
           const dbo = db?.db("svgeditor");
           dbo.collection("rooms").insertOne(obj, (err, result) => {
             if (err) throw err;
-            console.log("insert result: ", result);
             db.close();
             resolve();
           });
@@ -81,12 +184,11 @@ export class Database {
     return updatePromise;
   };
 
-  getShapes = (roomId: string) => {
-    return new Promise<string>((resolve, reject) => {
+  getShapes = async (roomId: string) => {
+    return new Promise<Record<string, any>[]>((resolve, reject) => {
       const query = { roomId };
       this.#connectToDB((error, db) => {
         if (error) throw error;
-        console.log("Connected with database!");
         if (db) {
           const dbo = db?.db("svgeditor");
           dbo.collection("rooms").findOne(query, (err, result) => {
@@ -94,7 +196,11 @@ export class Database {
 
             db.close();
             if (result) {
-              resolve(result.shapes);
+              const parsedResult =
+                typeof result.shapes === "string"
+                  ? JSON.parse(result.shapes)
+                  : result.shapes;
+              resolve(parsedResult);
             } else {
               reject("");
             }

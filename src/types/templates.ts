@@ -15,6 +15,8 @@ export enum GENERAL_EVENTS {
   GET_SHAPES = "get-shapes",
   DELETE_SHAPES = "delete-shapes",
   UPDATE_SHAPES = "update-shapes",
+  LOCK_SHAPES = "lock-shapes",
+  UNLOCK_SHAPES = "unlock-shapes",
   JOIN_ROOM = "join-room",
   DISCONNECT = "disconnect",
 }

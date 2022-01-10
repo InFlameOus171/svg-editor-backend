@@ -26,7 +26,20 @@ dotenv.config();
     });
   }, 30000);
 
-  const initOnClose = (socket: WebSocket) => {
+  const initOnClose = (socket: WebSocket, handler: SocketEventHandler) => {
+    socket.on("close", async () => {
+      const unformattedShapes = await database.unlockAllById(
+        socket.connectedRoom,
+        socket.connectedUserId
+      );
+
+      const newShapesInRoom = JSON.stringify(unformattedShapes);
+      console.log(
+        "new shapes in room ",
+        serverMessageEvents.shapes(newShapesInRoom)
+      );
+      handler.sendToAll(serverMessageEvents.shapes(newShapesInRoom));
+    });
     socket.on("close", () => {
       console.log("User", socket.connectedUser, "has disconnected.");
     });
@@ -36,8 +49,8 @@ dotenv.config();
     socket.isAlive = true;
     socket.isAlive = true;
 
-    initOnClose(socket);
-    initMessageEventHandler(socket);
+    const handler = initMessageEventHandler(socket);
+    initOnClose(socket, handler);
   });
 
   server.on("error", () => {
@@ -59,5 +72,6 @@ dotenv.config();
     socket.on("message", (receivedMessage) => {
       socketEventHandler.handleEvent(receivedMessage);
     });
+    return socketEventHandler;
   };
 }
