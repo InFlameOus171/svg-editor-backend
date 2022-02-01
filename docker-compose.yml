@@ -13,7 +13,7 @@ services:
 
   web:
     build: .
-    command: npm run start
+    command: npm run build:start
     volumes:
       - .:/home/server
       - /home/server/node_modules

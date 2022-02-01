@@ -5,7 +5,9 @@
   "main": "index.ts",
   "module": "index.ts",
   "scripts": {
-    "start": "npm install && npx nodemon --ext ts --exec \"tsc && node --experimental-specifier-resolution=node build/index.js\"",
+    "start": "npm install && nodemon --ext ts --exec \"tsc && node --experimental-specifier-resolution=node build/index.js\"",
+    "build": "tsc",
+    "build:start": "npm run build && npm run start",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "private": true,

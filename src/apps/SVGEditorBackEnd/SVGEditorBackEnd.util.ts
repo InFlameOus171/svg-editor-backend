@@ -1,13 +1,7 @@
-import { IncomingMessage } from "http";
-import url from "url";
 import { RawData, Server, WebSocket as WebSocketws } from "ws";
-import {
-  ServerMessageEvents,
-  serverMessageEvents,
-} from "../../types/templates";
-import mongo from "mongodb";
+import { serverMessageEvents } from "../../types/templates.js";
 import { ParsedData } from "../../types/types";
-import { Database } from "../Database/Database";
+import { MongoDBController } from "../MongoDBController/MongoDBController.js";
 
 const { message, ping, pong, error, shapes } = serverMessageEvents;
 
@@ -18,8 +12,8 @@ export const heartBeat = (socket: WebSocket) => {
 export class SocketEventHandler {
   #server: Server;
   #socket: WebSocket;
-  #database: Database;
-  constructor(server: Server, database: Database, socket: WebSocket) {
+  #database: MongoDBController;
+  constructor(server: Server, database: MongoDBController, socket: WebSocket) {
     this.#server = server;
     this.#database = database;
     this.#socket = socket;
@@ -42,7 +36,6 @@ export class SocketEventHandler {
       lockedById
     );
     const newShapesInRoom = JSON.stringify(unformattedShapes);
-    console.log("new shapes in room ", shapes(newShapesInRoom));
     this.sendToAll(shapes(newShapesInRoom));
   };
 
@@ -64,7 +57,6 @@ export class SocketEventHandler {
         break;
       }
       case "delete-shapes": {
-        console.log("DELETING", roomId, value);
         this.#handleDeleteShapes(roomId, value);
         break;
       }
@@ -98,7 +90,6 @@ export class SocketEventHandler {
             );
             if (await this.#database.doesRoomExist(roomId)) {
               console.log("Room exists. Returning current shapes.");
-              const aaa = await this.#database.getShapes(roomId);
               this.#database.getShapes(roomId).then((shapesValue) => {
                 this.#socket.send(shapes(JSON.stringify(shapesValue)));
               });
@@ -109,6 +100,14 @@ export class SocketEventHandler {
           } else {
             throw new Error("empty_room_id");
           }
+          this.#server.clients.forEach((client) => {
+            client.send(
+              message(
+                `User: ${this.#socket.connectedUser} has joined the room!`,
+                "Info:"
+              )
+            );
+          });
         } catch (err) {
           this.#socket.send(error(err as string));
           console.error(err);
@@ -121,12 +120,10 @@ export class SocketEventHandler {
         break;
       }
       case "lock-shapes": {
-        console.log("LOCKING", value);
         if (value === undefined || !roomId) return;
         this.#handleUpdateShapes(value, roomId, userId);
       }
       case "unlock-shapes": {
-        console.log("UNLOCKING", value);
         if (value === undefined || !roomId) return;
         this.#handleUpdateShapes(value, roomId);
       }
@@ -165,3 +162,25 @@ export class SocketEventHandler {
     });
   };
 }
+
+// Please don't judge me for this...
+export const startUpLogo = [
+  "  _____________   ____________  ___________    .___.__  __                 _____________________",
+  " /   _____/\\   \\ /   /  _____/  \\_   _____/  __| _/|__|/  |_  ___________  \\______   \\_   _____/",
+  " \\_____  \\  \\   Y   /   \\  ___   |    __)_  / __ | |  \\   __\\/  _ \\_  __ \\  |    |  _/|    __)_ ",
+  " /        \\  \\     /\\    \\_\\  \\  |        \\/ /_/ | |  ||  | (  <_> )  | \\/  |    |   \\|        \\",
+  "/_______  /   \\___/  \\______  / /_______  /\\____ | |__||__|  \\____/|__|     |______  /_______  /",
+  "       \\/                  \\/          \\/      \\/                                 \\/        \\/ ",
+  " ___.                                                                                            ",
+  "\\_ |__ ___.__.                                                                                  ",
+  " | __ <   |  |                                                                                  ",
+  " | \\_\\ \\___  |                                                                                  ",
+  " |___  / ____|                                                                                  ",
+  "     \\/\\/                                                                                       ",
+  "_____.___.             .__         _________        .__  .__  .__                               ",
+  "\\__  |   |____    _____|__| ____   \\_   ___ \\_____  |  | |  | |__|                              ",
+  " /   |   \\__  \\  /  ___/  |/    \\  /    \\  \\/\\__  \\ |  | |  | |  |                              ",
+  " \\____   |/ __ \\_\\___ \\|  |   |  \\ \\     \\____/ __ \\|  |_|  |_|  |                              ",
+  " / ______(____  /____  >__|___|  /  \\______  (____  /____/____/__|                              ",
+  " \\/           \\/     \\/        \\/          \\/     \\/                                            ",
+];

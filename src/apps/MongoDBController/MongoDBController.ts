@@ -1,6 +1,6 @@
 import mongo, { Auth } from "mongodb";
 
-export class Database {
+export class MongoDBController {
   #url: string;
   #authCredentials: Auth;
   #mongoClient: typeof mongo.MongoClient;
@@ -65,7 +65,6 @@ export class Database {
       return;
     let allShapes = await this.getShapes(roomId);
     allShapes = allShapes.filter((shape) => !ids.includes(shape.id));
-    console.log("cleaned shapes: ", allShapes);
 
     const updatePromise = new Promise<Record<string, any>[]>(
       (resolve, reject) => {
